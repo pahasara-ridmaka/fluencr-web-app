@@ -17,7 +17,12 @@ export async function GET(req: Request) {
       where: {
         ...(niche && niche !== "All" ? { niche } : {}),
         ...(search
-          ? { user: { name: { contains: search, mode: "insensitive" } } }
+          ? {
+              OR: [
+                { user: { name: { contains: search, mode: "insensitive" } } },
+                { niche: { contains: search, mode: "insensitive" } },
+              ],
+            }
           : {}),
       },
       include: { user: true },

@@ -63,13 +63,14 @@ export default function DeliverPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "UNDER_REVIEW", videoUrl: values.videoUrl }),
       })
-      if (!res.ok) throw new Error("Failed to submit work")
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Failed to submit work")
       setSubmittedJobs((prev) => [...prev, selectedJob.id])
       toast.success("Work submitted successfully! Awaiting brand review.")
       setSelectedJob(null)
       form.reset()
-    } catch {
-      toast.error("Failed to submit work")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to submit work")
     } finally {
       setIsSubmitting(false)
     }

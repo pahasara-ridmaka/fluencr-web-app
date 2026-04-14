@@ -63,13 +63,14 @@ export default function JobTrackerPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "UNDER_REVIEW" }),
       })
-      if (!res.ok) throw new Error("Failed to update job")
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Failed to update job")
       setJobs((prev) =>
         prev.map((job) => (job.id === jobId ? { ...job, status: "UNDER_REVIEW" } : job))
       )
       toast.success("Submitted for brand review")
-    } catch {
-      toast.error("Failed to update job status")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update job status")
     } finally {
       setAdvancing(null)
     }
