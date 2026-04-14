@@ -1,26 +1,38 @@
 import Link from "next/link"
+import { auth } from "@/auth"
+import { db } from "@/lib/db"
+import { Prisma } from "@prisma/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Plus } from "lucide-react"
 
-const campaigns = [
-  { id: "1", title: "Summer Collection Launch", platform: "Instagram", budget: 5000, status: "OPEN", proposals: 12, createdAt: "2024-01-15" },
-  { id: "2", title: "Tech Review Series", platform: "YouTube", budget: 8000, status: "IN_PROGRESS", proposals: 5, createdAt: "2024-01-10" },
-  { id: "3", title: "Holiday Gift Guide", platform: "TikTok", budget: 3500, status: "OPEN", proposals: 8, createdAt: "2024-01-08" },
-  { id: "4", title: "Brand Awareness Campaign", platform: "Instagram", budget: 12000, status: "FINISHED", proposals: 20, createdAt: "2024-01-01" },
-  { id: "5", title: "Product Launch Teaser", platform: "YouTube", budget: 6000, status: "OPEN", proposals: 3, createdAt: "2024-01-20" },
-]
-
 const statusColors: Record<string, "default" | "secondary" | "success" | "warning"> = {
   OPEN: "success",
   IN_PROGRESS: "default",
   FINISHED: "secondary",
   PROPOSAL_PENDING: "warning",
+  UNDER_REVIEW: "warning",
 }
 
-export default function CampaignsPage() {
+type CampaignWithProposals = Prisma.CampaignGetPayload<{ include: { proposals: true } }>
+
+export default async function CampaignsPage() {
+  const session = await auth()
+  let campaigns: CampaignWithProposals[] = []
+
+  if (session?.user?.id) {
+    const brand = await db.brand.findUnique({ where: { userId: session.user.id } })
+    if (brand) {
+      campaigns = await db.campaign.findMany({
+        where: { brandId: brand.id },
+        include: { proposals: true },
+        orderBy: { createdAt: "desc" },
+      })
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -42,34 +54,38 @@ export default function CampaignsPage() {
           <CardDescription>{campaigns.length} total campaigns</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Title</TableHead>
-                <TableHead>Platform</TableHead>
-                <TableHead>Budget</TableHead>
-                <TableHead>Proposals</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {campaigns.map((campaign) => (
-                <TableRow key={campaign.id}>
-                  <TableCell className="font-medium">{campaign.title}</TableCell>
-                  <TableCell>{campaign.platform}</TableCell>
-                  <TableCell>${campaign.budget.toLocaleString()}</TableCell>
-                  <TableCell>{campaign.proposals}</TableCell>
-                  <TableCell>{campaign.createdAt}</TableCell>
-                  <TableCell>
-                    <Badge variant={statusColors[campaign.status] ?? "secondary"}>
-                      {campaign.status.replace("_", " ")}
-                    </Badge>
-                  </TableCell>
+          {campaigns.length === 0 ? (
+            <p className="text-center py-8 text-muted-foreground">No campaigns yet. Create your first campaign!</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Platform</TableHead>
+                  <TableHead>Budget</TableHead>
+                  <TableHead>Proposals</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead>Status</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {campaigns.map((campaign) => (
+                  <TableRow key={campaign.id}>
+                    <TableCell className="font-medium">{campaign.title}</TableCell>
+                    <TableCell>{campaign.platform}</TableCell>
+                    <TableCell>${campaign.budget.toLocaleString()}</TableCell>
+                    <TableCell>{campaign.proposals.length}</TableCell>
+                    <TableCell>{new Date(campaign.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      <Badge variant={statusColors[campaign.status] ?? "secondary"}>
+                        {campaign.status.replace(/_/g, " ")}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

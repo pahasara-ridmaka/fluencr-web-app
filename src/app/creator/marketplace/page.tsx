@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -13,15 +13,18 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
-import { Search, DollarSign, Users, Zap } from "lucide-react"
+import { Search, DollarSign, Users } from "lucide-react"
 
-const campaigns = [
-  { id: "1", title: "Summer Collection Launch", brand: "StyleCo", platform: "Instagram", budget: 5000, description: "Promote our summer fashion line to a young audience.", requirements: "Min. 10k followers, fashion niche", proposals: 12, featured: true },
-  { id: "2", title: "Tech Review Series", brand: "TechGiant", platform: "YouTube", budget: 8000, description: "Create in-depth reviews of our latest tech products.", requirements: "Tech niche, min. 50k subscribers", proposals: 5, featured: false },
-  { id: "3", title: "Holiday Gift Guide", brand: "GiftShop", platform: "TikTok", budget: 3500, description: "Create engaging TikTok videos featuring our holiday products.", requirements: "Lifestyle niche, high engagement rate", proposals: 8, featured: true },
-  { id: "4", title: "Fitness App Promotion", brand: "FitLife", platform: "Instagram", budget: 4000, description: "Promote our new fitness app to health-conscious audiences.", requirements: "Fitness/sports niche, min. 15k followers", proposals: 6, featured: false },
-  { id: "5", title: "Food Blog Collaboration", brand: "FoodBrand", platform: "YouTube", budget: 2500, description: "Feature our products in your cooking videos and recipes.", requirements: "Food niche, authentic cooking content", proposals: 15, featured: false },
-]
+interface Campaign {
+  id: string
+  title: string
+  description: string
+  requirements: string
+  budget: number
+  platform: string
+  brand: { companyName: string; user: { name: string | null } }
+  proposals: { id: string }[]
+}
 
 const proposalSchema = z.object({
   pitch: z.string().min(20, "Pitch must be at least 20 characters"),
@@ -31,9 +34,11 @@ const proposalSchema = z.object({
 type ProposalValues = z.infer<typeof proposalSchema>
 
 export default function MarketplacePage() {
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [platform, setPlatform] = useState("all")
-  const [selectedCampaign, setSelectedCampaign] = useState<typeof campaigns[0] | null>(null)
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const form = useForm<ProposalValues>({
@@ -41,22 +46,35 @@ export default function MarketplacePage() {
     defaultValues: { pitch: "", price: 500 },
   })
 
-  const filtered = campaigns.filter(c => {
-    const matchSearch = c.title.toLowerCase().includes(search.toLowerCase()) ||
-      c.brand.toLowerCase().includes(search.toLowerCase())
-    const matchPlatform = platform === "all" || c.platform === platform
-    return matchSearch && matchPlatform
-  })
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (platform !== "all") params.set("platform", platform)
+    if (search) params.set("search", search)
+
+    setIsLoading(true)
+    fetch(`/api/creator/campaigns?${params.toString()}`)
+      .then((res) => res.json())
+      .then((data) => setCampaigns(data.campaigns ?? []))
+      .catch(() => toast.error("Failed to load campaigns"))
+      .finally(() => setIsLoading(false))
+  }, [search, platform])
 
   async function onSubmitProposal(values: ProposalValues) {
     if (!selectedCampaign) return
     setIsSubmitting(true)
     try {
-      // In demo mode, just show success
-      await new Promise(r => setTimeout(r, 500))
+      const res = await fetch("/api/creator/proposals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaignId: selectedCampaign.id, ...values }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Failed to submit proposal")
       toast.success(`Proposal submitted for "${selectedCampaign.title}"!`)
       setSelectedCampaign(null)
       form.reset()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to submit proposal")
     } finally {
       setIsSubmitting(false)
     }
@@ -92,50 +110,48 @@ export default function MarketplacePage() {
         </Select>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        {filtered.map(campaign => (
-          <Card key={campaign.id} className={campaign.featured ? "ring-2 ring-primary" : ""}>
-            {campaign.featured && (
-              <div className="flex items-center gap-1 px-6 pt-4 pb-0">
-                <Zap className="h-3 w-3 text-yellow-500 fill-yellow-500" />
-                <span className="text-xs font-semibold text-yellow-600">Featured</span>
-              </div>
-            )}
-            <CardHeader>
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <CardTitle className="text-base">{campaign.title}</CardTitle>
-                  <CardDescription>{campaign.brand}</CardDescription>
+      {isLoading ? (
+        <p className="text-center py-12 text-muted-foreground">Loading campaigns...</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+          {campaigns.map((campaign) => (
+            <Card key={campaign.id}>
+              <CardHeader>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-base">{campaign.title}</CardTitle>
+                    <CardDescription>{campaign.brand.companyName}</CardDescription>
+                  </div>
+                  <Badge variant="secondary">{campaign.platform}</Badge>
                 </div>
-                <Badge variant="secondary">{campaign.platform}</Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">{campaign.description}</p>
-              <div className="text-xs text-muted-foreground border rounded-md p-2 bg-muted/50">
-                <span className="font-medium">Requirements: </span>{campaign.requirements}
-              </div>
-              <div className="flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-1 text-green-600 font-semibold">
-                  <DollarSign className="h-4 w-4" />
-                  ${campaign.budget.toLocaleString()} budget
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">{campaign.description}</p>
+                <div className="text-xs text-muted-foreground border rounded-md p-2 bg-muted/50">
+                  <span className="font-medium">Requirements: </span>{campaign.requirements}
                 </div>
-                <div className="flex items-center gap-1 text-muted-foreground">
-                  <Users className="h-4 w-4" />
-                  {campaign.proposals} proposals
+                <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-1 text-green-600 font-semibold">
+                    <DollarSign className="h-4 w-4" />
+                    ${campaign.budget.toLocaleString()} budget
+                  </div>
+                  <div className="flex items-center gap-1 text-muted-foreground">
+                    <Users className="h-4 w-4" />
+                    {campaign.proposals.length} proposals
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button className="w-full" onClick={() => setSelectedCampaign(campaign)}>
-                Submit Proposal
-              </Button>
-            </CardFooter>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+              <CardFooter>
+                <Button className="w-full" onClick={() => setSelectedCampaign(campaign)}>
+                  Submit Proposal
+                </Button>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      )}
 
-      {filtered.length === 0 && (
+      {!isLoading && campaigns.length === 0 && (
         <div className="text-center py-12">
           <p className="text-muted-foreground">No campaigns found matching your criteria.</p>
         </div>
@@ -146,7 +162,7 @@ export default function MarketplacePage() {
           <DialogHeader>
             <DialogTitle>Submit Proposal</DialogTitle>
             <DialogDescription>
-              Apply to &quot;{selectedCampaign?.title}&quot; by {selectedCampaign?.brand}
+              Apply to &quot;{selectedCampaign?.title}&quot; by {selectedCampaign?.brand.companyName}
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
