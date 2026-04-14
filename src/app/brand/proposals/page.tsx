@@ -16,28 +16,14 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { toast } from "sonner"
 import { CheckCircle, XCircle } from "lucide-react"
-
-const mockProposals = [
-  { id: "1", creator: "Alex Johnson", campaign: "Summer Collection", price: 1200, status: "PROPOSAL_PENDING", niche: "Fashion", followers: "45K" },
-  { id: "2", creator: "Maria Garcia", campaign: "Tech Review Series", price: 2500, status: "IN_PROGRESS", niche: "Tech", followers: "120K" },
-  { id: "3", creator: "Sam Lee", campaign: "Holiday Gift Guide", price: 800, status: "PROPOSAL_PENDING", niche: "Lifestyle", followers: "28K" },
-  { id: "4", creator: "Jordan Smith", campaign: "Summer Collection", price: 1500, status: "FINISHED", niche: "Fashion", followers: "67K" },
-  { id: "5", creator: "Taylor Brown", campaign: "Brand Awareness", price: 3000, status: "PROPOSAL_PENDING", niche: "Lifestyle", followers: "200K" },
-]
-
-const statusColors: Record<string, "default" | "secondary" | "success" | "warning" | "destructive"> = {
-  PROPOSAL_PENDING: "warning",
-  IN_PROGRESS: "default",
-  FINISHED: "success",
-  OPEN: "secondary",
-}
+import { MOCK_PROPOSALS, STATUS_BADGE_VARIANTS, type MockProposal } from "@/lib/mock-data"
 
 export default function ProposalsPage() {
-  const [proposals, setProposals] = useState(mockProposals)
-  const [selectedProposal, setSelectedProposal] = useState<typeof mockProposals[0] | null>(null)
+  const [proposals, setProposals] = useState<MockProposal[]>(MOCK_PROPOSALS)
+  const [selectedProposal, setSelectedProposal] = useState<MockProposal | null>(null)
   const [dialogAction, setDialogAction] = useState<"approve" | "reject" | null>(null)
 
-  function openDialog(proposal: typeof mockProposals[0], action: "approve" | "reject") {
+  function openDialog(proposal: MockProposal, action: "approve" | "reject") {
     setSelectedProposal(proposal)
     setDialogAction(action)
   }
@@ -98,7 +84,7 @@ export default function ProposalsPage() {
                   <TableCell>{proposal.followers}</TableCell>
                   <TableCell className="font-semibold">${proposal.price.toLocaleString()}</TableCell>
                   <TableCell>
-                    <Badge variant={statusColors[proposal.status] ?? "secondary"}>
+                    <Badge variant={STATUS_BADGE_VARIANTS[proposal.status] ?? "secondary"}>
                       {proposal.status.replace("_", " ")}
                     </Badge>
                   </TableCell>

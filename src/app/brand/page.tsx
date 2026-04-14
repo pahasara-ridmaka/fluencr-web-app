@@ -12,20 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Megaphone, DollarSign, FileText, Users, Plus, ArrowRight } from "lucide-react"
-
-const mockCampaigns = [
-  { id: "1", title: "Summer Collection Launch", platform: "Instagram", budget: 5000, status: "OPEN", proposals: 12 },
-  { id: "2", title: "Tech Review Series", platform: "YouTube", budget: 8000, status: "IN_PROGRESS", proposals: 5 },
-  { id: "3", title: "Holiday Gift Guide", platform: "TikTok", budget: 3500, status: "OPEN", proposals: 8 },
-  { id: "4", title: "Brand Awareness Campaign", platform: "Instagram", budget: 12000, status: "FINISHED", proposals: 20 },
-]
-
-const statusColors: Record<string, "default" | "secondary" | "success" | "warning" | "destructive"> = {
-  OPEN: "success",
-  IN_PROGRESS: "default",
-  FINISHED: "secondary",
-  PROPOSAL_PENDING: "warning",
-}
+import { MOCK_CAMPAIGNS, STATUS_BADGE_VARIANTS } from "@/lib/mock-data"
 
 export default async function BrandDashboard() {
   const session = await auth()
@@ -133,14 +120,14 @@ export default async function BrandDashboard() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockCampaigns.map((campaign) => (
+              {MOCK_CAMPAIGNS.map((campaign) => (
                 <TableRow key={campaign.id}>
                   <TableCell className="font-medium">{campaign.title}</TableCell>
                   <TableCell>{campaign.platform}</TableCell>
                   <TableCell>${campaign.budget.toLocaleString()}</TableCell>
                   <TableCell>{campaign.proposals}</TableCell>
                   <TableCell>
-                    <Badge variant={statusColors[campaign.status] ?? "secondary"}>
+                    <Badge variant={STATUS_BADGE_VARIANTS[campaign.status] ?? "secondary"}>
                       {campaign.status.replace("_", " ")}
                     </Badge>
                   </TableCell>
