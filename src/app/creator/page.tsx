@@ -1,25 +1,57 @@
 import Link from "next/link"
 import { auth } from "@/auth"
+import { db } from "@/lib/db"
+import { Prisma } from "@prisma/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { FileText, Briefcase, CheckCircle, DollarSign, ArrowRight, ShoppingBag } from "lucide-react"
+import { STATUS_BADGE_VARIANTS } from "@/lib/mock-data"
 
-const recentActivity = [
-  { id: "1", text: "Your proposal for 'Summer Collection Launch' was approved!", time: "2h ago", type: "success" },
-  { id: "2", text: "New campaign matching your niche: 'Tech Review Series'", time: "5h ago", type: "info" },
-  { id: "3", text: "Payment of $1,200 received for 'Holiday Campaign'", time: "1d ago", type: "success" },
-  { id: "4", text: "Proposal submitted for 'Brand Awareness Campaign'", time: "2d ago", type: "neutral" },
-]
+type ProposalWithCampaignBrand = Prisma.ProposalGetPayload<{
+  include: { campaign: { include: { brand: true } } }
+}>
 
 export default async function CreatorDashboard() {
   const session = await auth()
 
+  let activeProposals = 0
+  let jobsInProgress = 0
+  let completed = 0
+  let totalEarned = 0
+  let recentProposals: ProposalWithCampaignBrand[] = []
+
+  if (session?.user?.id) {
+    const creator = await db.creator.findUnique({ where: { userId: session.user.id } })
+    if (creator) {
+      activeProposals = await db.proposal.count({
+        where: { creatorId: creator.id, status: "PROPOSAL_PENDING" },
+      })
+      jobsInProgress = await db.proposal.count({
+        where: { creatorId: creator.id, status: "IN_PROGRESS" },
+      })
+      completed = await db.proposal.count({
+        where: { creatorId: creator.id, status: "FINISHED" },
+      })
+      const earnedResult = await db.proposal.aggregate({
+        where: { creatorId: creator.id, status: "FINISHED" },
+        _sum: { price: true },
+      })
+      totalEarned = earnedResult._sum.price ?? 0
+      recentProposals = await db.proposal.findMany({
+        where: { creatorId: creator.id },
+        include: { campaign: { include: { brand: true } } },
+        orderBy: { updatedAt: "desc" },
+        take: 5,
+      })
+    }
+  }
+
   const stats = [
-    { label: "Active Proposals", value: "4", icon: FileText, color: "text-purple-600" },
-    { label: "Jobs In Progress", value: "2", icon: Briefcase, color: "text-blue-600" },
-    { label: "Completed", value: "8", icon: CheckCircle, color: "text-green-600" },
-    { label: "Total Earned", value: "$9,400", icon: DollarSign, color: "text-orange-600" },
+    { label: "Active Proposals", value: String(activeProposals), icon: FileText, color: "text-purple-600" },
+    { label: "Jobs In Progress", value: String(jobsInProgress), icon: Briefcase, color: "text-blue-600" },
+    { label: "Completed", value: String(completed), icon: CheckCircle, color: "text-green-600" },
+    { label: "Total Earned", value: `$${totalEarned.toLocaleString()}`, icon: DollarSign, color: "text-orange-600" },
   ]
 
   return (
@@ -62,7 +94,7 @@ export default async function CreatorDashboard() {
               <ShoppingBag className="h-8 w-8 text-purple-600" />
               <div>
                 <p className="font-semibold">Browse Marketplace</p>
-                <p className="text-sm text-muted-foreground">12 new campaigns available</p>
+                <p className="text-sm text-muted-foreground">Find new campaigns</p>
               </div>
             </CardContent>
           </Link>
@@ -73,7 +105,7 @@ export default async function CreatorDashboard() {
               <Briefcase className="h-8 w-8 text-blue-600" />
               <div>
                 <p className="font-semibold">Job Tracker</p>
-                <p className="text-sm text-muted-foreground">2 jobs in progress</p>
+                <p className="text-sm text-muted-foreground">{jobsInProgress} jobs in progress</p>
               </div>
             </CardContent>
           </Link>
@@ -94,8 +126,8 @@ export default async function CreatorDashboard() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Your latest updates</CardDescription>
+            <CardTitle>Recent Proposals</CardTitle>
+            <CardDescription>Your latest proposal updates</CardDescription>
           </div>
           <Button variant="ghost" size="sm" asChild>
             <Link href="/creator/proposals">
@@ -104,20 +136,26 @@ export default async function CreatorDashboard() {
           </Button>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {recentActivity.map((activity) => (
-              <div key={activity.id} className="flex items-start gap-3">
-                <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${
-                  activity.type === "success" ? "bg-green-500" :
-                  activity.type === "info" ? "bg-blue-500" : "bg-gray-300"
-                }`} />
-                <div className="flex-1">
-                  <p className="text-sm">{activity.text}</p>
-                  <p className="text-xs text-muted-foreground">{activity.time}</p>
+          {recentProposals.length === 0 ? (
+            <p className="text-center py-8 text-muted-foreground">No proposals yet. Browse the marketplace to get started!</p>
+          ) : (
+            <div className="space-y-4">
+              {recentProposals.map((proposal) => (
+                <div key={proposal.id} className="flex items-center justify-between gap-3 border-b pb-3 last:border-0 last:pb-0">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{proposal.campaign.title}</p>
+                    <p className="text-xs text-muted-foreground">{proposal.campaign.brand.companyName}</p>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-sm font-semibold text-green-600">${proposal.price.toLocaleString()}</span>
+                    <Badge variant={STATUS_BADGE_VARIANTS[proposal.status] ?? "secondary"} className="text-xs">
+                      {proposal.status.replace(/_/g, " ")}
+                    </Badge>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -1,21 +1,36 @@
+import { auth } from "@/auth"
+import { db } from "@/lib/db"
+import { Prisma } from "@prisma/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
-const proposals = [
-  { id: "1", campaign: "Summer Collection Launch", brand: "StyleCo", price: 1200, status: "IN_PROGRESS", submittedAt: "2024-01-15" },
-  { id: "2", campaign: "Tech Review Series", brand: "TechGiant", price: 2500, status: "PROPOSAL_PENDING", submittedAt: "2024-01-18" },
-  { id: "3", campaign: "Holiday Gift Guide", brand: "GiftShop", price: 800, status: "FINISHED", submittedAt: "2024-01-10" },
-  { id: "4", campaign: "Brand Awareness Campaign", brand: "BrandX", price: 1500, status: "PROPOSAL_PENDING", submittedAt: "2024-01-20" },
-]
-
 const statusColors: Record<string, "default" | "secondary" | "success" | "warning"> = {
   PROPOSAL_PENDING: "warning",
   IN_PROGRESS: "default",
+  UNDER_REVIEW: "warning",
   FINISHED: "success",
 }
 
-export default function MyProposalsPage() {
+type ProposalWithCampaignBrand = Prisma.ProposalGetPayload<{
+  include: { campaign: { include: { brand: true } } }
+}>
+
+export default async function MyProposalsPage() {
+  const session = await auth()
+  let proposals: ProposalWithCampaignBrand[] = []
+
+  if (session?.user?.id) {
+    const creator = await db.creator.findUnique({ where: { userId: session.user.id } })
+    if (creator) {
+      proposals = await db.proposal.findMany({
+        where: { creatorId: creator.id },
+        include: { campaign: { include: { brand: true } } },
+        orderBy: { createdAt: "desc" },
+      })
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -29,32 +44,36 @@ export default function MyProposalsPage() {
           <CardDescription>{proposals.length} proposals submitted</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Campaign</TableHead>
-                <TableHead>Brand</TableHead>
-                <TableHead>Your Price</TableHead>
-                <TableHead>Submitted</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {proposals.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-medium">{p.campaign}</TableCell>
-                  <TableCell>{p.brand}</TableCell>
-                  <TableCell className="font-semibold text-green-600">${p.price.toLocaleString()}</TableCell>
-                  <TableCell>{p.submittedAt}</TableCell>
-                  <TableCell>
-                    <Badge variant={statusColors[p.status] ?? "secondary"}>
-                      {p.status.replace("_", " ")}
-                    </Badge>
-                  </TableCell>
+          {proposals.length === 0 ? (
+            <p className="text-center py-8 text-muted-foreground">No proposals yet. Browse the marketplace to get started!</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Campaign</TableHead>
+                  <TableHead>Brand</TableHead>
+                  <TableHead>Your Price</TableHead>
+                  <TableHead>Submitted</TableHead>
+                  <TableHead>Status</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {proposals.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-medium">{p.campaign.title}</TableCell>
+                    <TableCell>{p.campaign.brand.companyName}</TableCell>
+                    <TableCell className="font-semibold text-green-600">${p.price.toLocaleString()}</TableCell>
+                    <TableCell>{new Date(p.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      <Badge variant={statusColors[p.status] ?? "secondary"}>
+                        {p.status.replace(/_/g, " ")}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

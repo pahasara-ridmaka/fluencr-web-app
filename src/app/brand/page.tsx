@@ -1,5 +1,7 @@
 import Link from "next/link"
 import { auth } from "@/auth"
+import { db } from "@/lib/db"
+import { Prisma } from "@prisma/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -12,16 +14,60 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Megaphone, DollarSign, FileText, Users, Plus, ArrowRight } from "lucide-react"
-import { MOCK_CAMPAIGNS, STATUS_BADGE_VARIANTS } from "@/lib/mock-data"
+import { STATUS_BADGE_VARIANTS } from "@/lib/mock-data"
+
+type CampaignWithProposals = Prisma.CampaignGetPayload<{ include: { proposals: true } }>
 
 export default async function BrandDashboard() {
   const session = await auth()
 
+  let recentCampaigns: CampaignWithProposals[] = []
+  let activeCampaigns = 0
+  let pendingProposals = 0
+  let budgetSpent = 0
+  let totalCreators = 0
+
+  if (session?.user?.id) {
+    const brand = await db.brand.findUnique({ where: { userId: session.user.id } })
+    if (brand) {
+      recentCampaigns = await db.campaign.findMany({
+        where: { brandId: brand.id },
+        include: { proposals: true },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      })
+
+      activeCampaigns = await db.campaign.count({
+        where: { brandId: brand.id, status: { in: ["OPEN", "IN_PROGRESS"] } },
+      })
+
+      pendingProposals = await db.proposal.count({
+        where: { campaign: { brandId: brand.id }, status: "PROPOSAL_PENDING" },
+      })
+
+      const spentResult = await db.proposal.aggregate({
+        where: { campaign: { brandId: brand.id }, status: "FINISHED" },
+        _sum: { price: true },
+      })
+      budgetSpent = spentResult._sum.price ?? 0
+
+      const uniqueCreators = await db.proposal.findMany({
+        where: {
+          campaign: { brandId: brand.id },
+          status: { in: ["IN_PROGRESS", "UNDER_REVIEW", "FINISHED"] },
+        },
+        select: { creatorId: true },
+        distinct: ["creatorId"],
+      })
+      totalCreators = uniqueCreators.length
+    }
+  }
+
   const stats = [
-    { label: "Active Campaigns", value: "3", icon: Megaphone, color: "text-purple-600" },
-    { label: "Budget Spent", value: "$28,500", icon: DollarSign, color: "text-green-600" },
-    { label: "Pending Proposals", value: "25", icon: FileText, color: "text-orange-600" },
-    { label: "Total Creators", value: "47", icon: Users, color: "text-blue-600" },
+    { label: "Active Campaigns", value: String(activeCampaigns), icon: Megaphone, color: "text-purple-600" },
+    { label: "Budget Spent", value: `$${budgetSpent.toLocaleString()}`, icon: DollarSign, color: "text-green-600" },
+    { label: "Pending Proposals", value: String(pendingProposals), icon: FileText, color: "text-orange-600" },
+    { label: "Total Creators", value: String(totalCreators), icon: Users, color: "text-blue-600" },
   ]
 
   return (
@@ -88,7 +134,7 @@ export default async function BrandDashboard() {
               <FileText className="h-8 w-8 text-orange-600" />
               <div>
                 <p className="font-semibold">Review Proposals</p>
-                <p className="text-sm text-muted-foreground">25 pending proposals</p>
+                <p className="text-sm text-muted-foreground">{pendingProposals} pending proposals</p>
               </div>
             </CardContent>
           </Link>
@@ -109,32 +155,36 @@ export default async function BrandDashboard() {
           </Button>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Campaign</TableHead>
-                <TableHead>Platform</TableHead>
-                <TableHead>Budget</TableHead>
-                <TableHead>Proposals</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {MOCK_CAMPAIGNS.map((campaign) => (
-                <TableRow key={campaign.id}>
-                  <TableCell className="font-medium">{campaign.title}</TableCell>
-                  <TableCell>{campaign.platform}</TableCell>
-                  <TableCell>${campaign.budget.toLocaleString()}</TableCell>
-                  <TableCell>{campaign.proposals}</TableCell>
-                  <TableCell>
-                    <Badge variant={STATUS_BADGE_VARIANTS[campaign.status] ?? "secondary"}>
-                      {campaign.status.replace("_", " ")}
-                    </Badge>
-                  </TableCell>
+          {recentCampaigns.length === 0 ? (
+            <p className="text-center py-8 text-muted-foreground">No campaigns yet. Create your first campaign!</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Campaign</TableHead>
+                  <TableHead>Platform</TableHead>
+                  <TableHead>Budget</TableHead>
+                  <TableHead>Proposals</TableHead>
+                  <TableHead>Status</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {recentCampaigns.map((campaign) => (
+                  <TableRow key={campaign.id}>
+                    <TableCell className="font-medium">{campaign.title}</TableCell>
+                    <TableCell>{campaign.platform}</TableCell>
+                    <TableCell>${campaign.budget.toLocaleString()}</TableCell>
+                    <TableCell>{campaign.proposals.length}</TableCell>
+                    <TableCell>
+                      <Badge variant={STATUS_BADGE_VARIANTS[campaign.status] ?? "secondary"}>
+                        {campaign.status.replace(/_/g, " ")}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>
