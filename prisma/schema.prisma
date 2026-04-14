@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  @@unique([identifier, token])
+}
+
+enum Role {
+  BRAND
+  CREATOR
+}
+
+enum JobStatus {
+  OPEN
+  PROPOSAL_PENDING
+  IN_PROGRESS
+  UNDER_REVIEW
+  FINISHED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          Role?
+  onboarded     Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  brand         Brand?
+  creator       Creator?
+}
+
+model Brand {
+  id           String     @id @default(cuid())
+  userId       String     @unique
+  companyName  String
+  website      String?
+  industry     String
+  logo         String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaigns    Campaign[]
+}
+
+model Creator {
+  id           String     @id @default(cuid())
+  userId       String     @unique
+  niche        String
+  socialLinks  Json?
+  followers    Int        @default(0)
+  portfolioUrl String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  proposals    Proposal[]
+}
+
+model Campaign {
+  id           String     @id @default(cuid())
+  brandId      String
+  title        String
+  description  String     @db.Text
+  requirements String     @db.Text
+  budget       Float
+  platform     String
+  status       JobStatus  @default(OPEN)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  brand        Brand      @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  proposals    Proposal[]
+}
+
+model Proposal {
+  id          String    @id @default(cuid())
+  campaignId  String
+  creatorId   String
+  pitch       String    @db.Text
+  price       Float
+  videoUrl    String?
+  status      JobStatus @default(PROPOSAL_PENDING)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  campaign    Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  creator     Creator   @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+}
